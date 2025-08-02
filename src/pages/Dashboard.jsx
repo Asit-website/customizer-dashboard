@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import api from '../api';
+import Layout from '../components/Layout';
 
 function Dashboard() {
   const [config, setConfig] = useState(null);
@@ -17,6 +18,8 @@ function Dashboard() {
   const [editForm, setEditForm] = useState({ name: '', email: '', phone: '', password: '' });
   const [editError, setEditError] = useState('');
   const [editSuccess, setEditSuccess] = useState('');
+  const [totalUsers, setTotalUsers] = useState(0);
+  const [totalProducts, setTotalProducts] = useState(0);
 
   const token = localStorage.getItem('token');
   const headers = { Authorization: `Bearer ${token}` };
@@ -52,6 +55,19 @@ function Dashboard() {
     setLoading(false);
   };
 
+  const fetchCounts = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const usersRes = await api.get('/api/users', { headers: { Authorization: `Bearer ${token}` } });
+      setTotalUsers(usersRes.data.length);
+      const productsRes = await api.get('/api/layerdesigns/sqs', { headers: { Authorization: `Bearer ${token}` } });
+      setTotalProducts(productsRes.data.length);
+    } catch (err) {
+      setTotalUsers(0);
+      setTotalProducts(0);
+    }
+  };
+
   useEffect(() => {
     if (user?.role === 'superadmin') {
       fetchUsers();
@@ -59,13 +75,9 @@ function Dashboard() {
     } else {
       fetchConfig();
     }
+    fetchCounts();
     // eslint-disable-next-line
   }, []);
-
-  const handleLogout = () => {
-    localStorage.clear();
-    window.location.reload();
-  };
 
   // Registration form handlers (superadmin)
   const handleRegChange = e => {
@@ -104,7 +116,7 @@ function Dashboard() {
     setSuccess('');
     try {
       if (config) {
-        await api.put(`/api/configurations/${config._id}`, form, { headers });
+        await api.put(`/api/configurations/${config.id}`, form, { headers });
         setSuccess('Configuration updated successfully!');
       } else {
         const res = await api.post('/api/configurations', form, { headers });
@@ -135,7 +147,7 @@ function Dashboard() {
     setEditError('');
     setEditSuccess('');
     try {
-      await api.put(`/api/users/${editModal.user._id}`, editForm, { headers });
+      await api.put(`/api/users/${editModal.user.id}`, editForm, { headers });
       setEditSuccess('User updated successfully!');
       fetchUsers();
       setTimeout(() => {
@@ -147,7 +159,7 @@ function Dashboard() {
   };
   const handleToggleActive = async (user) => {
     try {
-      await api.patch(`/api/users/${user._id}/active`, { active: !user.active }, { headers });
+      await api.patch(`/api/users/${user.id}/active`, { active: !user.active }, { headers });
       fetchUsers();
     } catch (err) {
       // Optionally show error
@@ -157,174 +169,123 @@ function Dashboard() {
   const handleDeleteUser = async (user) => {
     if (!window.confirm(`Are you sure you want to delete user ${user.email}? This action cannot be undone.`)) return;
     try {
-      await api.delete(`/api/users/${user._id}`, { headers });
+      await api.delete(`/api/users/${user.id}`, { headers });
       fetchUsers();
     } catch (err) {
       // Optionally show error
     }
   };
 
-  if (loading) return <div className="d-flex justify-content-center align-items-center min-vh-100 bg-light"><div>Loading...</div></div>;
+  if (loading) return (
+    <Layout currentPage="dashboard">
+      <div className="d-flex justify-content-center align-items-center min-vh-100">
+        <div className="text-center">
+          <div className="spinner mb-3"></div>
+          <div className="text-primary fs-5">Loading...</div>
+        </div>
+      </div>
+    </Layout>
+  );
 
   return (
-    <div className="d-flex min-vh-100 bg-light">
-      {/* Sidebar */}
-      <div className="bg-white border-end p-4 d-flex flex-column align-items-center" style={{ width: 220, minHeight: '100vh' }}>
-        <div className="mb-4">
-          <span className="fs-4 fw-bold text-primary">🛒 Customizer</span>
-        </div>
-        <ul className="nav nav-pills flex-column w-100">
-          <li className="nav-item mb-2">
-            <span className="nav-link active bg-primary text-white fw-semibold" style={{ cursor: 'default' }}>{user?.role === 'superadmin' ? 'Users' : 'Configuration'}</span>
-          </li>
-        </ul>
-        <div className="mt-auto small text-center opacity-75 text-secondary">&copy; {new Date().getFullYear()} Customizer</div>
-      </div>
+    <Layout currentPage="dashboard">
       {/* Main Content */}
-      <div className="flex-grow-1 d-flex flex-column">
-        {/* Header */}
-        <div className="bg-white shadow-sm px-4 py-3 d-flex justify-content-between align-items-center" style={{ minHeight: 64 }}>
-          <div className="fs-5 fw-bold">{user?.role === 'superadmin' ? 'Admin Dashboard' : 'User Dashboard'}</div>
-          <div className="d-flex align-items-center gap-3">
-            <span className="fw-semibold text-primary">{user?.name} ({user?.email})</span>
-            <button className="btn btn-outline-danger btn-sm" onClick={handleLogout}>Logout</button>
+      {user?.role !== 'superadmin' ? (
+        <div className="d-flex justify-content-center align-items-center p-4">
+          <div className="w-100 fade-in" style={{ maxWidth: 600 }}>
+            <div className="card">
+              <div className="card-header">
+                <h4 className="mb-0">
+                  <i className="fas fa-store me-2"></i>
+                  Store Configuration
+                </h4>
+              </div>
+              <div className="card-body">
+                {error && <div className="alert alert-danger">
+                  <i className="fas fa-exclamation-triangle me-2"></i>{error}
+                </div>}
+                {success && <div className="alert alert-success">
+                  <i className="fas fa-check-circle me-2"></i>{success}
+                </div>}
+                
+                <form onSubmit={handleSubmit} className="row g-4">
+                  <div className="col-12">
+                    <label className="form-label">
+                      <i className="fas fa-id-card me-2"></i>Store ID
+                    </label>
+                    <input type="text" className="form-control" name="storeId" value={form.storeId} onChange={handleChange} required />
+                  </div>
+                  <div className="col-12">
+                    <label className="form-label">
+                      <i className="fas fa-link me-2"></i>Store URL
+                    </label>
+                    <input type="text" className="form-control" name="storeUrl" value={form.storeUrl} onChange={handleChange} required />
+                  </div>
+                  <div className="col-12">
+                    <label className="form-label">
+                      <i className="fas fa-key me-2"></i>Store Access Token
+                    </label>
+                    <input type="text" className="form-control" name="storeAccessToken" value={form.storeAccessToken} onChange={handleChange} required />
+                  </div>
+                  <div className="col-12">
+                    <label className="form-label">
+                      <i className="fas fa-server me-2"></i>Store Endpoint
+                    </label>
+                    <input type="text" className="form-control" name="storeEndpoint" value={form.storeEndpoint} onChange={handleChange} required />
+                  </div>
+                  <div className="col-12">
+                    <div className="form-check">
+                      <input type="checkbox" className="form-check-input" id="subscription" name="subscription" checked={form.subscription === 'active'} onChange={handleChange} />
+                      <label className="form-check-label" htmlFor="subscription">
+                        <i className="fas fa-toggle-on me-2"></i>Subscription Active
+                      </label>
+                    </div>
+                  </div>
+                  <div className="col-12">
+                    <button type="submit" className="btn btn-primary w-100">
+                      <i className={`fas ${config ? 'fa-save' : 'fa-plus'} me-2`}></i>
+                      {config ? 'Update Configuration' : 'Save Configuration'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
           </div>
         </div>
-        {/* Main Content */}
-        <div className="flex-grow-1 d-flex justify-content-center align-items-center">
-          {user?.role === 'superadmin' ? (
-            <div className="w-100" style={{ maxWidth: 900 }}>
-              <div className="card shadow p-4">
-                <div className="d-flex justify-content-between align-items-center mb-3">
-                  <h4 className="mb-0">All Users</h4>
-                  <button className="btn btn-success" onClick={() => setShowModal(true)}>
-                    + Add User
-                  </button>
+      ) : (
+        <div className="d-flex justify-content-center align-items-center p-4">
+          <div className="w-100 d-flex justify-content-center align-items-center gap-4" style={{ maxWidth: 800 }}>
+            <div className="card text-center fade-in" style={{ minWidth: 250 }}>
+              <div className="card-body">
+                <div className="mb-3">
+                  <i className="fas fa-users fa-3x text-primary"></i>
                 </div>
-                <div className="table-responsive">
-                  <table className="table table-hover align-middle text-center">
-                    <thead className="table-light">
-                      <tr>
-                        <th>Name</th>
-                        <th>Email</th>
-                        <th>Phone</th>
-                        <th>Status</th>
-                        <th>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {users.filter(u => u.role !== 'superadmin').map(u => (
-                        <tr key={u._id}>
-                          <td>{u.name}</td>
-                          <td>{u.email}</td>
-                          <td>{u.phone}</td>
-                          <td>
-                            {u.active ? <span className="badge bg-success">Active</span> : <span className="badge bg-secondary">Inactive</span>}
-                          </td>
-                          <td>
-                            <button className="btn btn-sm btn-primary me-2" onClick={() => openEditModal(u)} disabled={!u.active}>Edit</button>
-                            <button className={`btn btn-sm ${u.active ? 'btn-danger' : 'btn-success'} me-2`} onClick={() => handleToggleActive(u)}>
-                              {u.active ? 'Deactivate' : 'Activate'}
-                            </button>
-                            <button className="btn btn-sm btn-outline-danger" onClick={() => handleDeleteUser(u)}>Delete</button>
-                          </td>
-                        </tr>
-                      ))}
-                      {users.filter(u => u.role !== 'superadmin').length === 0 && <tr><td colSpan="5">No users found.</td></tr>}
-                    </tbody>
-                  </table>
+                <div className="fs-1 fw-bold text-primary mb-2">{totalUsers}</div>
+                <div className="text-secondary fs-5">Total Users</div>
+                <div className="small text-muted mt-2">
+                  <i className="fas fa-chart-line me-1"></i>
+                  Active accounts
                 </div>
               </div>
-              {/* Modal for Add User */}
-              {showModal && (
-                <div style={{
-                  position: 'fixed',
-                  top: 0,
-                  left: 0,
-                  width: '100vw',
-                  height: '100vh',
-                  background: 'rgba(0,0,0,0.4)',
-                  zIndex: 1050,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}>
-                  <div className="card shadow p-4" style={{ minWidth: 400, maxWidth: 500, width: '100%', position: 'relative' }}>
-                    <button
-                      type="button"
-                      className="btn-close position-absolute end-0 top-0 m-3"
-                      aria-label="Close"
-                      onClick={() => { setShowModal(false); setRegError(''); setRegSuccess(''); }}
-                    ></button>
-                    <h4 className="mb-3">Add User</h4>
-                    {regError && <div className="alert alert-danger">{regError}</div>}
-                    {regSuccess && <div className="alert alert-success">{regSuccess}</div>}
-                    <form onSubmit={handleUserRegister} className="row g-3">
-                      <div className="col-md-6">
-                        <label className="form-label">Name</label>
-                        <input type="text" className="form-control" name="name" value={userReg.name} onChange={handleRegChange} required />
-                      </div>
-                      <div className="col-md-6">
-                        <label className="form-label">Email</label>
-                        <input type="email" className="form-control" name="email" value={userReg.email} onChange={handleRegChange} required />
-                      </div>
-                      <div className="col-md-6">
-                        <label className="form-label">Password</label>
-                        <input type="password" className="form-control" name="password" value={userReg.password} onChange={handleRegChange} required />
-                      </div>
-                      <div className="col-md-6">
-                        <label className="form-label">Phone</label>
-                        <input type="text" className="form-control" name="phone" value={userReg.phone} onChange={handleRegChange} required />
-                      </div>
-                      <div className="col-12">
-                        <button type="submit" className="btn btn-primary w-100">Add User</button>
-                      </div>
-                    </form>
-                  </div>
-                </div>
-              )}
             </div>
-          ) : (
-            <div className="card shadow p-4 w-100" style={{ maxWidth: 500 }}>
-              {error && <div className="alert alert-danger">{error}</div>}
-              {success && <div className="alert alert-success">{success}</div>}
-              <form onSubmit={handleSubmit}>
+            
+            <div className="card text-center fade-in" style={{ minWidth: 250 }}>
+              <div className="card-body">
                 <div className="mb-3">
-                  <label className="form-label">Store ID</label>
-                  <input type="text" className="form-control" name="storeId" value={form.storeId} onChange={handleChange} required />
+                  <i className="fas fa-box fa-3x text-success"></i>
                 </div>
-                <div className="mb-3">
-                  <label className="form-label">Store URL</label>
-                  <input type="text" className="form-control" name="storeUrl" value={form.storeUrl} onChange={handleChange} required />
+                <div className="fs-1 fw-bold text-success mb-2">{totalProducts}</div>
+                <div className="text-secondary fs-5">Total Products</div>
+                <div className="small text-muted mt-2">
+                  <i className="fas fa-chart-bar me-1"></i>
+                  Available products
                 </div>
-                <div className="mb-3">
-                  <label className="form-label">Access Token</label>
-                  <input type="text" className="form-control" name="storeAccessToken" value={form.storeAccessToken} onChange={handleChange} required />
-                </div>
-                <div className="mb-3">
-                  <label className="form-label">Store Endpoint</label>
-                  <input type="text" className="form-control" name="storeEndpoint" value={form.storeEndpoint} onChange={handleChange} required />
-                </div>
-                <div className="mb-2 fw-semibold">Subscription</div>
-                <div className="form-check form-switch mb-3">
-                  <input
-                    className="form-check-input"
-                    type="checkbox"
-                    id="subscriptionSwitch"
-                    name="subscription"
-                    checked={form.subscription === 'active'}
-                    onChange={handleChange}
-                  />
-                  <label className="form-check-label ms-2" htmlFor="subscriptionSwitch">
-                    {form.subscription === 'active' ? 'Active' : 'Inactive'}
-                  </label>
-                </div>
-                <button type="submit" className="btn btn-primary w-100">{config ? 'Update' : 'Create'} Configuration</button>
-              </form>
+              </div>
             </div>
-          )}
+          </div>
         </div>
-      </div>
+      )}
+      
       {/* Edit User Modal */}
       {editModal.show && (
         <div style={{
@@ -333,47 +294,69 @@ function Dashboard() {
           left: 0,
           width: '100vw',
           height: '100vh',
-          background: 'rgba(0,0,0,0.4)',
+          background: 'rgba(0,0,0,0.5)',
           zIndex: 1050,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
+          backdropFilter: 'blur(5px)',
         }}>
-          <div className="card shadow p-4" style={{ minWidth: 400, maxWidth: 500, width: '100%', position: 'relative' }}>
-            <button
-              type="button"
-              className="btn-close position-absolute end-0 top-0 m-3"
-              aria-label="Close"
-              onClick={closeEditModal}
-            ></button>
-            <h4 className="mb-3">Edit User</h4>
-            {editError && <div className="alert alert-danger">{editError}</div>}
-            {editSuccess && <div className="alert alert-success">{editSuccess}</div>}
-            <form onSubmit={handleEditSubmit} className="row g-3">
-              <div className="col-md-6">
-                <label className="form-label">Name</label>
-                <input type="text" className="form-control" name="name" value={editForm.name} onChange={handleEditChange} required />
-              </div>
-              <div className="col-md-6">
-                <label className="form-label">Email</label>
-                <input type="email" className="form-control" name="email" value={editForm.email} onChange={handleEditChange} required />
-              </div>
-              <div className="col-md-6">
-                <label className="form-label">Phone</label>
-                <input type="text" className="form-control" name="phone" value={editForm.phone} onChange={handleEditChange} required />
-              </div>
-              <div className="col-md-6">
-                <label className="form-label">Password</label>
-                <input type="password" className="form-control" name="password" value={editForm.password} onChange={handleEditChange} placeholder="Leave blank to keep unchanged" />
-              </div>
-              <div className="col-12">
-                <button type="submit" className="btn btn-primary w-100">Update User</button>
-              </div>
-            </form>
+          <div className="card shadow-lg fade-in" style={{ minWidth: 450, maxWidth: 550, width: '100%', position: 'relative' }}>
+            <div className="card-header d-flex justify-content-between align-items-center">
+              <h4 className="mb-0">
+                <i className="fas fa-user-edit me-2"></i>Edit User
+              </h4>
+              <button
+                type="button"
+                className="btn-close"
+                aria-label="Close"
+                onClick={closeEditModal}
+              ></button>
+            </div>
+            <div className="card-body">
+              {editError && <div className="alert alert-danger">
+                <i className="fas fa-exclamation-triangle me-2"></i>{editError}
+              </div>}
+              {editSuccess && <div className="alert alert-success">
+                <i className="fas fa-check-circle me-2"></i>{editSuccess}
+              </div>}
+              
+              <form onSubmit={handleEditSubmit} className="row g-3">
+                <div className="col-md-6">
+                  <label className="form-label">
+                    <i className="fas fa-user me-2"></i>Name
+                  </label>
+                  <input type="text" className="form-control" name="name" value={editForm.name} onChange={handleEditChange} required />
+                </div>
+                <div className="col-md-6">
+                  <label className="form-label">
+                    <i className="fas fa-envelope me-2"></i>Email
+                  </label>
+                  <input type="email" className="form-control" name="email" value={editForm.email} onChange={handleEditChange} required />
+                </div>
+                <div className="col-md-6">
+                  <label className="form-label">
+                    <i className="fas fa-phone me-2"></i>Phone
+                  </label>
+                  <input type="text" className="form-control" name="phone" value={editForm.phone} onChange={handleEditChange} required />
+                </div>
+                <div className="col-md-6">
+                  <label className="form-label">
+                    <i className="fas fa-lock me-2"></i>Password
+                  </label>
+                  <input type="password" className="form-control" name="password" value={editForm.password} onChange={handleEditChange} placeholder="Leave blank to keep unchanged" />
+                </div>
+                <div className="col-12">
+                  <button type="submit" className="btn btn-primary w-100">
+                    <i className="fas fa-save me-2"></i>Update User
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
       )}
-    </div>
+    </Layout>
   );
 }
 
