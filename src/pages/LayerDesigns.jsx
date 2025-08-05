@@ -11,7 +11,7 @@ import Layout from '../components/Layout';
 
 function LayerDesigns() {
   const [user, setUser] = useState(null);
-  const [sqs, setSqs] = useState([]);
+  const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showPopup, setShowPopup] = useState(false);
@@ -23,26 +23,53 @@ function LayerDesigns() {
   const navigate = useNavigate();
   const [showAddProduct, setShowAddProduct] = useState(false);
   const [newProduct, setNewProduct] = useState('');
+  const [newProductType, setNewProductType] = useState('2d');
+  const [newTabSettings, setNewTabSettings] = useState({
+    aiEditor: true,
+    imageEdit: true,
+    textEdit: true,
+    colors: true,
+    clipart: true
+  });
   const [showEditProduct, setShowEditProduct] = useState(false);
   const [editProduct, setEditProduct] = useState('');
   const [editProductOld, setEditProductOld] = useState('');
+  const [editProductType, setEditProductType] = useState('2d');
+  const [editTabSettings, setEditTabSettings] = useState({
+    aiEditor: true,
+    imageEdit: true,
+    textEdit: true,
+    colors: true,
+    clipart: true
+  });
 
   useEffect(() => {
     const userData = localStorage.getItem('user');
     if (userData) {
       setUser(JSON.parse(userData));
     }
-    fetchSqs();
+    fetchProducts();
   }, []);
 
-  const fetchSqs = async () => {
+  const fetchProducts = async () => {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const res = await api.get('/api/layerdesigns/sqs', { headers: { Authorization: `Bearer ${token}` } });
-      setSqs(res.data);
+      const res = await api.get('/api/layerdesigns', { headers: { Authorization: `Bearer ${token}` } });
+      // Group by SQ and get unique products
+      const productMap = new Map();
+      res.data.forEach(design => {
+        if (!productMap.has(design.sq)) {
+          productMap.set(design.sq, {
+            sq: design.sq,
+            productType: design.productType,
+            tabSettings: design.tabSettings
+          });
+        }
+      });
+      setProducts(Array.from(productMap.values()));
     } catch (err) {
-      setError('Failed to fetch SQs');
+      setError('Failed to fetch Products');
     }
     setLoading(false);
   };
@@ -59,11 +86,21 @@ function LayerDesigns() {
       await api.post('/api/layerdesigns', {
         sq: newProduct,
         designName: 'Default Design',
+        productType: newProductType,
+        tabSettings: newTabSettings,
         layersDesign: {}
       }, { headers: { Authorization: `Bearer ${token}` } });
       setShowAddProduct(false);
       setNewProduct('');
-      fetchSqs();
+      setNewProductType('2d');
+      setNewTabSettings({
+        aiEditor: true,
+        imageEdit: true,
+        textEdit: true,
+        colors: true,
+        clipart: true
+      });
+      fetchProducts();
       toast.success('Product added successfully!');
     } catch (err) {
       setError('Failed to add Product');
@@ -85,14 +122,38 @@ function LayerDesigns() {
         oldSq: editProductOld,
         newSq: editProduct
       }, { headers: { Authorization: `Bearer ${token}` } });
+      
+      // Update product type and tab settings for all designs with this SQ
+      const designsResponse = await api.get('/api/layerdesigns', { headers: { Authorization: `Bearer ${token}` } });
+      const designsToUpdate = designsResponse.data.filter(design => design.sq === editProduct);
+      
+      for (const design of designsToUpdate) {
+        await api.put(`/api/layerdesigns/${design.id}`, {
+          sq: editProduct,
+          designName: design.designName,
+          productType: editProductType,
+          tabSettings: editTabSettings,
+          layersDesign: design.layersDesign,
+          customizableData: design.customizableData
+        }, { headers: { Authorization: `Bearer ${token}` } });
+      }
+      
       setShowEditProduct(false);
       setEditProduct('');
       setEditProductOld('');
-      fetchSqs();
-      toast.success('Product SQ updated successfully!');
+      setEditProductType('2d');
+      setEditTabSettings({
+        aiEditor: true,
+        imageEdit: true,
+        textEdit: true,
+        colors: true,
+        clipart: true
+      });
+      fetchProducts();
+      toast.success('Product updated successfully!');
     } catch (err) {
-      setError('Failed to update Product SQ');
-      toast.error('Failed to update Product SQ');
+      setError('Failed to update Product');
+      toast.error('Failed to update Product');
     }
   };
 
@@ -111,7 +172,7 @@ function LayerDesigns() {
       try {
         const token = localStorage.getItem('token');
         await api.delete(`/api/layerdesigns/by-sq/${sq}`, { headers: { Authorization: `Bearer ${token}` } });
-        fetchSqs();
+        fetchProducts();
         toast.success('Product deleted successfully!');
       } catch (err) {
         toast.error('Failed to delete Product');
@@ -175,18 +236,38 @@ function LayerDesigns() {
                 <table className="table table-hover">
                   <thead className="table-light">
                     <tr>
-                      <th style={{ width: '70%' }}>Product SQ</th>
-                      <th style={{ width: '30%', textAlign: 'center' }}>Actions</th>
+                      <th style={{ width: '40%' }}>Product SQ</th>
+                      <th style={{ width: '20%' }}>Product Type</th>
+                      <th style={{ width: '20%' }}>Tab Settings</th>
+                      <th style={{ width: '20%', textAlign: 'center' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {sqs.map(sq => (
-                      <tr key={sq}>
-                        <td className="align-middle">{sq}</td>
+                    {products.map(product => (
+                      <tr key={product.sq}>
+                        <td className="align-middle">{product.sq}</td>
+                        <td className="align-middle">
+                          <span className={`badge ${product.productType === '3d' ? 'bg-success' : 'bg-primary'}`}>
+                            {product.productType.toUpperCase()}
+                          </span>
+                        </td>
+                        <td className="align-middle">
+                          <div className="d-flex flex-wrap gap-1">
+                            {Object.entries(product.tabSettings).map(([key, value]) => (
+                              <span 
+                                key={key} 
+                                className={`badge ${value ? 'bg-success' : 'bg-secondary'}`}
+                                style={{ fontSize: '10px' }}
+                              >
+                                {key.replace(/([A-Z])/g, ' $1').trim()}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
                         <td className="text-center">
                           <div className="d-flex justify-content-center align-items-center">
                             <button
-                              ref={el => menuBtnRefs.current[sq] = el}
+                              ref={el => menuBtnRefs.current[product.sq] = el}
                               className="btn btn-sm btn-outline-secondary"
                               style={{
                                 width: 40,
@@ -196,16 +277,16 @@ function LayerDesigns() {
                                 alignItems: 'center',
                                 justifyContent: 'center',
                                 border: '1px solid #dee2e6',
-                                background: menuOpenSq === sq ? '#e9ecef' : '#fff',
-                                transition: 'all 0.2s ease',
-                                boxShadow: menuOpenSq === sq ? '0 2px 4px rgba(0,0,0,0.1)' : 'none'
+                                                                 background: menuOpenSq === product.sq ? '#e9ecef' : '#fff',
+                                 transition: 'all 0.2s ease',
+                                 boxShadow: menuOpenSq === product.sq ? '0 2px 4px rgba(0,0,0,0.1)' : 'none'
                               }}
-                              onClick={(e) => handleMenuClick(sq, e)}
+                              onClick={(e) => handleMenuClick(product.sq, e)}
                               title="Actions"
                             >
                               <i className="fas fa-ellipsis-v" style={{ fontSize: '14px', color: '#6c757d' }}></i>
                             </button>
-                            {menuOpenSq === sq && ReactDOM.createPortal(
+                            {menuOpenSq === product.sq && ReactDOM.createPortal(
                               <div
                                 ref={menuRef}
                                 style={{
@@ -225,8 +306,10 @@ function LayerDesigns() {
                                   <button
                                     className="btn btn-link w-100 text-start px-3 py-2"
                                     onClick={() => {
-                                      setEditProductOld(sq);
-                                      setEditProduct(sq);
+                                      setEditProductOld(product.sq);
+                                      setEditProduct(product.sq);
+                                      setEditProductType(product.productType);
+                                      setEditTabSettings(product.tabSettings);
                                       setShowEditProduct(true);
                                       setMenuOpenSq(null);
                                     }}
@@ -243,7 +326,7 @@ function LayerDesigns() {
                                   <button
                                     className="btn btn-link w-100 text-start px-3 py-2 text-danger"
                                     onClick={() => {
-                                      handleDeleteProduct(sq);
+                                      handleDeleteProduct(product.sq);
                                       setMenuOpenSq(null);
                                     }}
                                     style={{ 
@@ -258,7 +341,7 @@ function LayerDesigns() {
                                   <button
                                     className="btn btn-link w-100 text-start px-3 py-2"
                                     onClick={() => {
-                                      navigate(`/layerdesigns/${sq}`);
+                                      navigate(`/layerdesigns/${product.sq}`);
                                       setMenuOpenSq(null);
                                     }}
                                     style={{ 
@@ -279,9 +362,9 @@ function LayerDesigns() {
                         </td>
                       </tr>
                     ))}
-                    {sqs.length === 0 && (
+                    {products.length === 0 && (
                       <tr>
-                        <td colSpan="2" className="text-center text-muted py-4">
+                        <td colSpan="4" className="text-center text-muted py-4">
                           <i className="fas fa-box-open fa-2x mb-3 d-block"></i>
                           No products found.
                         </td>
@@ -338,6 +421,45 @@ function LayerDesigns() {
                   />
                 </div>
                 <div className="col-12">
+                  <label className="form-label">
+                    <i className="fas fa-cube me-2"></i>Product Type
+                  </label>
+                  <select 
+                    className="form-control" 
+                    value={newProductType} 
+                    onChange={(e) => setNewProductType(e.target.value)}
+                  >
+                    <option value="2d">2D</option>
+                    <option value="3d">3D</option>
+                  </select>
+                </div>
+                <div className="col-12">
+                  <label className="form-label">
+                    <i className="fas fa-tabs me-2"></i>Tab Settings
+                  </label>
+                  <div className="row g-2">
+                    {Object.entries(newTabSettings).map(([key, value]) => (
+                      <div key={key} className="col-6">
+                        <div className="form-check">
+                          <input
+                            className="form-check-input"
+                            type="checkbox"
+                            id={`new-${key}`}
+                            checked={value}
+                            onChange={(e) => setNewTabSettings(prev => ({
+                              ...prev,
+                              [key]: e.target.checked
+                            }))}
+                          />
+                          <label className="form-check-label" htmlFor={`new-${key}`}>
+                            {key.replace(/([A-Z])/g, ' $1').trim()}
+                          </label>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="col-12">
                   <button type="submit" className="btn btn-primary w-100">
                     <i className="fas fa-save me-2"></i>Add Product
                   </button>
@@ -389,6 +511,45 @@ function LayerDesigns() {
                     placeholder="Enter Product SQ"
                     required 
                   />
+                </div>
+                <div className="col-12">
+                  <label className="form-label">
+                    <i className="fas fa-cube me-2"></i>Product Type
+                  </label>
+                  <select 
+                    className="form-control" 
+                    value={editProductType} 
+                    onChange={(e) => setEditProductType(e.target.value)}
+                  >
+                    <option value="2d">2D</option>
+                    <option value="3d">3D</option>
+                  </select>
+                </div>
+                <div className="col-12">
+                  <label className="form-label">
+                    <i className="fas fa-tabs me-2"></i>Tab Settings
+                  </label>
+                  <div className="row g-2">
+                    {Object.entries(editTabSettings).map(([key, value]) => (
+                      <div key={key} className="col-6">
+                        <div className="form-check">
+                          <input
+                            className="form-check-input"
+                            type="checkbox"
+                            id={`edit-${key}`}
+                            checked={value}
+                            onChange={(e) => setEditTabSettings(prev => ({
+                              ...prev,
+                              [key]: e.target.checked
+                            }))}
+                          />
+                          <label className="form-check-label" htmlFor={`edit-${key}`}>
+                            {key.replace(/([A-Z])/g, ' $1').trim()}
+                          </label>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
                 <div className="col-12">
                   <button type="submit" className="btn btn-primary w-100">
